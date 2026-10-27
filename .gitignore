@@ -1,0 +1,19 @@
+# Local databases
+catalog.db
+catalog.db-*
+*.sqlite
+*.sqlite3
+
+# Secrets and environment settings
+.env
+.env.*
+!.env.example
+
+# Python environments and temporary files
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Mac files
+.DS_Store
