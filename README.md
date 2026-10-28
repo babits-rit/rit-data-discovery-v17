@@ -55,3 +55,8 @@ Open **http://127.0.0.1:8765/relationships** to browse a unified metadata graph.
 
 ## Version 1.7: structured use cases
 The Data Access & Usage form now supports multiple independently stored use cases per request. Each use case has a stable UUID, readable `USE-000001` identifier, required name/description, Integration Hub topic, optional population/scope, frequency, retention, permitted and prohibited uses. The request itself continues to support HERM multi-select and an assigned steward. Existing free-text use cases are migrated into a single `Legacy use case` entry without deleting original text. Existing approval workflow is unchanged. This is a local prototype without verified authentication.
+
+
+## Version 1.8 — Navigation
+
+Open http://127.0.0.1:8765/menu for the main menu. A shared, responsive navigation bar is included on every HTML page, with Discover Data, Data Governance, and Administration menus. Existing routes and data structures are unchanged. No authentication is added.
