@@ -3,6 +3,7 @@
 import csv, io, json, sqlite3, pathlib, re, datetime, urllib.parse, uuid
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from openpyxl import load_workbook
+import source_context as sc
 ROOT=pathlib.Path(__file__).resolve().parent
 CAPS=json.loads((ROOT/'herm_capabilities.json').read_text())
 BYCODE={c['code']:c for c in CAPS}
@@ -374,10 +375,26 @@ class Handler(BaseHTTPRequestHandler):
  def fail(self,msg,status=400):self.send({'error':str(msg)},status)
  def do_GET(self):
   path=urllib.parse.urlsplit(self.path).path
-  if path in ('/','/admin','/glossary','/glossary-admin','/herm_capabilities.json','/api/template','/api/glossary/template','/api/glossary-mappings/template','/stewards','/access-requests','/marketplace','/marketplace-admin','/api/marketplace/template','/relationships','/menu'):
-   name={'/':'index.html','/admin':'admin.html','/glossary':'glossary.html','/glossary-admin':'glossary-admin.html','/herm_capabilities.json':'herm_capabilities.json','/api/template':'resource-import-template.xlsx','/api/glossary/template':'glossary-import-template.xlsx','/api/glossary-mappings/template':'glossary-mapping-import-template.xlsx','/stewards':'stewards.html','/access-requests':'access-requests.html','/marketplace':'marketplace.html','/marketplace-admin':'marketplace-admin.html','/api/marketplace/template':'marketplace-import-template.xlsx','/relationships':'relationships.html','/menu':'menu.html'}[path]
+  if path in ('/','/admin','/glossary','/glossary-admin','/herm_capabilities.json','/api/template','/api/glossary/template','/api/glossary-mappings/template','/stewards','/access-requests','/marketplace','/marketplace-admin','/data-products','/data-products-admin','/api/marketplace/template','/relationships','/menu'):
+   name={'/':'index.html','/admin':'admin.html','/glossary':'glossary.html','/glossary-admin':'glossary-admin.html','/herm_capabilities.json':'herm_capabilities.json','/api/template':'resource-import-template.xlsx','/api/glossary/template':'glossary-import-template.xlsx','/api/glossary-mappings/template':'glossary-mapping-import-template.xlsx','/stewards':'stewards.html','/access-requests':'access-requests.html','/marketplace':'marketplace.html','/marketplace-admin':'marketplace-admin.html','/data-products':'marketplace.html','/data-products-admin':'marketplace-admin.html','/api/marketplace/template':'marketplace-import-template.xlsx','/relationships':'relationships.html','/menu':'menu.html'}[path]
    mime='text/html; charset=utf-8' if name.endswith('.html') else 'application/json' if name.endswith('.json') else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
    self.send((ROOT/name).read_bytes(),mime=mime);return
+  if path=='/source-context':self.send((ROOT/'source-context.html').read_bytes(),mime='text/html; charset=utf-8');return
+  if path.startswith('/api/source-context/'):
+   with connect() as c:
+    sc.setup(c)
+    if path=='/api/source-context/systems':result=sc.rows(c,'SELECT * FROM source_system_profiles ORDER BY name')
+    elif path=='/api/source-context/processes':result=sc.rows(c,'SELECT * FROM business_process_profiles ORDER BY name')
+    elif path=='/api/source-context/rules':result=sc.get_rules(c)
+    elif path=='/api/source-context/product':result=sc.product_context(c,urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get('id',['0'])[0])
+    elif path=='/api/source-context/acknowledgements':result=sc.get_ack(c,urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query).get('request_id',['0'])[0])
+    else:self.fail('Not found',404);return
+   self.send(result);return
+  if path=='/sql-library':self.send((ROOT/'sql-library.html').read_bytes(),mime='text/html; charset=utf-8');return
+  if path=='/api/sql-library':
+   with connect() as c:
+    c.execute('''CREATE TABLE IF NOT EXISTS sql_definitions (id INTEGER PRIMARY KEY, asset_id INTEGER NOT NULL UNIQUE REFERENCES assets(id) ON DELETE CASCADE, filename TEXT NOT NULL UNIQUE, sql_text TEXT NOT NULL, updated_at TEXT NOT NULL)''')
+    self.send([dict(x) for x in c.execute('''SELECT s.asset_id,a.name,s.filename,s.sql_text,s.updated_at FROM sql_definitions s JOIN assets a ON a.id=s.asset_id ORDER BY a.name''')]);return
   if path=='/api/marketplace':self.send(all_collections(True));return
   if path=='/api/marketplace/admin':self.send(all_collections(False));return
   if path=='/api/stewards':self.send(all_stewards());return
@@ -400,6 +417,17 @@ class Handler(BaseHTTPRequestHandler):
     count=resource_import(data,filename) if path=='/api/admin/import' else glossary_import(data,filename)
     self.send({'imported':count,'status':'Created' if 'glossary' in path else 'Unpublished'});return
    d=json.loads(data.decode('utf-8'))
+   if path.startswith('/api/source-context/'):
+    with connect() as c:
+     sc.setup(c)
+     if path=='/api/source-context/system':result=sc.profile(c,'system',d)
+     elif path=='/api/source-context/process':result=sc.profile(c,'process',d)
+     elif path=='/api/source-context/rule':result=sc.rule(c,d)
+     elif path=='/api/source-context/link':result=sc.link(c,d)
+     elif path=='/api/source-context/review':result=sc.review(c,d)
+     elif path=='/api/source-context/acknowledge':result=sc.acknowledge(c,d)
+     else:self.fail('Not found',404);return
+    self.send(result);return
    if path=='/api/relationships/add':self.send(add_graph_link(d));return
    if path=='/api/relationships/delete':self.send(remove_graph_link(d));return
    if path=='/api/marketplace/admin':self.send({'id':save_collection(d)});return
@@ -512,6 +540,7 @@ class Handler(BaseHTTPRequestHandler):
   except Exception as e:self.fail('Internal error: '+str(e),500)
 if __name__=='__main__':
  init()
+ with connect() as c:sc.setup(c)
  migrate_identifiers()
  graph_init()
  print('RIT Data Discovery Portal v1.6 — local-only prototype: http://127.0.0.1:8765')
